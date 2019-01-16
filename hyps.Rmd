@@ -7,12 +7,6 @@ output: html_notebook
 library(tidyverse)
 library(dMod)
 ```
-```{r}
- conv <- function(time) {
-+ (time/24)*2*pi}
-conv(0:24) %>% round(2)
-cos(conv(0:24)) %>% round(2)
-```
 
 
 ## Set up model
@@ -34,7 +28,7 @@ r <- eqnlist() %>%
               description = "PIF protein synthesis") %>%
   addReaction(from="PIFprotein",
               to="",
-              rate = "(k3 * light + k4)*PIFprotein",
+              rate = "(k3*light+k4)*PIFprotein",
               description = "PIF protein degradation")
 
 r
@@ -43,12 +37,26 @@ r
 generate model
 
 ```{r}
-model0 <- odemodel(r, modelname="rna", compile = TRUE)
+model0 <- odemodel(r, modelname="rna", compile = TRUE, forcings = "light")
+```
+
+
+specify time and light on/off events
+
+```{r}
+times <- seq(0, 120, len=200)
+
+light.forcing <- data.frame(
+  name="light",
+  time=times,
+  value=as.numeric((times %% 24 ) < 8))
+
+light.forcing
 ```
 
 generate prediction function
 ```{r}
-x <- Xs(model0)
+x <- Xs(model0, forcings = light.forcing)
 ```
 
 
@@ -74,26 +82,18 @@ pars
 
 ```
 
-add events for lights
-
-```{r}
-e <- eventlist(var=rep("light",10),
-               time = rep(c(0,8), 5) + rep(cumsum(c(0,rep(24,4))),each = 2),
-               value = rep(c(1,0) , 5),
-               method = "replace")
-               
-e
-
-```
-
 
 predict
 ```{r}
-times <- seq(0, 120, len=200)
-
-
 prediction <- x(times, pars)
 
 plot(prediction)
 ```
+
+
+## parameter estimation
+
+now try to estimate parameters based on observed data.  Start with Col only:
+
+
 
