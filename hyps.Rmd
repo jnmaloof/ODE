@@ -29,7 +29,15 @@ r <- eqnlist() %>%
   addReaction(from="PIFprotein",
               to="",
               rate = "(k3*light+k4)*PIFprotein",
-              description = "PIF protein degradation")
+              description = "PIF protein degradation") %>%
+  addReaction(from="",
+              to="growth",
+              rate="k5*PIFprotein",
+              description = "PIF growth control") %>%
+  addReaction(from="growth",
+              to="",
+              rate="k6*growth",
+              description="cessation of growth")
 
 r
 ```
@@ -44,7 +52,7 @@ model0 <- odemodel(r, modelname="rna", compile = TRUE, forcings = "light")
 specify time and light on/off events
 
 ```{r}
-times <- seq(0, 120, len=200)
+times <- seq(0, 120, len=2000)
 
 light.forcing <- data.frame(
   name="light",
@@ -70,18 +78,20 @@ parameters
 pars <- c(
   "PIFmRNA" = 0,
   "PIFprotein" = 0,
+  "growth" = 0,
   "phase" = 0,
   "amplitude" = 1,
   "k1" = 1,
   "k2" = 1,
   "k3" = 5,
-  "k4" = .1
+  "k4" = .1,
+  "k5" = 1,
+  "k6" = 1
 )
 
 pars
 
 ```
-
 
 predict
 ```{r}
@@ -96,4 +106,80 @@ plot(prediction)
 now try to estimate parameters based on observed data.  Start with Col only:
 
 
+
+```{r}
+col <- read.csv("data/Col.csv") %>%
+  mutate(name="growth", condition="col") %>%
+  mutate(sigma=0.05*value) %>%
+  select(name, time, value, sigma, condition)
+
+col <- as.datalist(col,split.by="condition")
+```
+
+```{r}
+plot(col)
+```
+
+
+convert parameters to eqn form:
+
+```{r}
+p <- eqnvec() %>%
+  define("x~x", x = getParameters(x)) %>%
+  define("x ~ 0", x=c("PIFmRNA", "PIFprotein", "growth")) %>%
+  insert("x ~ exp(x)", x = c("k1", "k2", "k3", "k4", "k5", "k6")) %>% # keep rates positive
+  P(condition = "col")
+
+getEquations(p)
+```
+
+objective function
+```{r}
+obj <- normL2(col, x*p)
+```
+
+Fit the data
+
+```{r}
+mu <- structure(rep(0, length(parameters)), names = parameters)
+constr <- constraintL2(mu = mu, sigma = 5)
+myfit <- trust(obj + constr, mu, rinit = 1, rmax = 1000, iterlim = 1000)
+myfit$argument
+```
+
+plot it
+```{r}
+times <- 0:80
+plot((x*p)(times, myfit$argument), col)
+```
+
+```{r}
+fitlist <- mstrust(obj + constr,
+                   center =myfit$argument,
+                   fits=60,
+                   cores = 3,
+                   iterlim = 1000,
+                   sd=2)
+```
+
+```{r}
+pars <- as.parframe(fitlist)
+plotValues(pars, tol = 10)
+```
+
+plot the best one
+```{r}
+plot((x*p)(times, pars[1,]), col)
+```
+
+better plot 
+```{r}
+prediction <- predict(x*p, times = times, pars = pars[1,], data=col)
+prediction %>%
+  filter(name=="growth") %>%
+  ggplot(aes(x=time, y = value)) +
+  geom_line() +
+  geom_point(data = attr(prediction, "data"), color="red") +
+  geom_vline(xintercept =c(0, 8, 24, 32, 48, 56, 72, 80))
+```
 
