@@ -1,0 +1,99 @@
+---
+title: "hyp_growth_ODE"
+output: html_notebook
+---
+
+```{r}
+library(tidyverse)
+library(dMod)
+```
+```{r}
+ conv <- function(time) {
++ (time/24)*2*pi}
+conv(0:24) %>% round(2)
+cos(conv(0:24)) %>% round(2)
+```
+
+
+## Set up model
+
+reactions
+```{r}
+r <- eqnlist() %>%
+  addReaction(from="",
+              to="PIFmRNA",
+              rate="(1+cos((time+phase)/24*2*3.141593))*amplitude",
+              description="PIF mRNA synthesis") %>%
+  addReaction(from="PIFmRNA",
+              to="",
+              rate="k1*PIFmRNA",
+              description = "PIF mRNA degradation") %>%
+  addReaction(from="",
+              to="PIFprotein",
+              rate="k2*PIFmRNA",
+              description = "PIF protein synthesis") %>%
+  addReaction(from="PIFprotein",
+              to="",
+              rate = "(k3 * light + k4)*PIFprotein",
+              description = "PIF protein degradation")
+
+r
+```
+
+generate model
+
+```{r}
+model0 <- odemodel(r, modelname="rna", compile = TRUE)
+```
+
+generate prediction function
+```{r}
+x <- Xs(model0)
+```
+
+
+add parameters
+
+```{r}
+parameters <- getParameters(x)
+
+parameters
+
+pars <- c(
+  "PIFmRNA" = 0,
+  "PIFprotein" = 0,
+  "phase" = 0,
+  "amplitude" = 1,
+  "k1" = 1,
+  "k2" = 1,
+  "k3" = 5,
+  "k4" = .1
+)
+
+pars
+
+```
+
+add events for lights
+
+```{r}
+e <- eventlist(var=rep("light",10),
+               time = rep(c(0,8), 5) + rep(cumsum(c(0,rep(24,4))),each = 2),
+               value = rep(c(1,0) , 5),
+               method = "replace")
+               
+e
+
+```
+
+
+predict
+```{r}
+times <- seq(0, 120, len=200)
+
+
+prediction <- x(times, pars)
+
+plot(prediction)
+```
+
